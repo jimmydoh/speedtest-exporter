@@ -3,6 +3,10 @@
 Simple **Speedtest exporter** for **Prometheus** written in **Python** using the
 official CLI from **Ookla**
 
+[![Build dev image](https://github.com/jimmydoh/speedtest-exporter/actions/workflows/build-dev.yml/badge.svg)](https://github.com/jimmydoh/speedtest-exporter/actions/workflows/build-dev.yml)
+[![Test main image](https://github.com/jimmydoh/speedtest-exporter/actions/workflows/build-main-pull.yml/badge.svg)](https://github.com/jimmydoh/speedtest-exporter/actions/workflows/build-main-pull.yml)
+[![Release main image](https://github.com/jimmydoh/speedtest-exporter/actions/workflows/build-release.yml/badge.svg)](https://github.com/jimmydoh/speedtest-exporter/actions/workflows/build-release.yml)
+
 Forked from [MiguelNdeCarvalho/speedtest-exporter](https://github.com/MiguelNdeCarvalho/speedtest-exporter)
 
 The following changes have been completed:
