@@ -17,10 +17,6 @@ logging.basicConfig(
     format=FORMAT_STRING,
 )
 
-# Disable Waitress Logs
-log = logging.getLogger("waitress")
-log.disabled = True
-
 # Create Metrics
 jitter = Gauge(
     "speedtest_jitter_latency_milliseconds",
@@ -83,10 +79,6 @@ up = Gauge(
     ],
 )
 
-cache_seconds = int(os.environ.get("SPEEDTEST_CACHE_FOR", 0))
-cache_until = datetime.datetime.fromtimestamp(0)
-
-
 def bytes_to_bits(bytes_per_sec):
     """Converts bytes to bits"""
     return bytes_per_sec * 8
@@ -111,6 +103,9 @@ def is_json(myjson):
 
 def run_test():
     """Run the speedtest and return the extracted results"""
+
+    logging.info("Running a new speedtest")
+
     manual_server_id = os.environ.get("SPEEDTEST_SERVER")
     timeout = int(os.environ.get("SPEEDTEST_TIMEOUT", 90))
 
@@ -176,71 +171,65 @@ def run_test():
 
 @app.route("/metrics")
 def update_results():
-    """Update the results if expected by caching time"""
-    global cache_until
+    """Trigger the speedtest and return the metrics"""
+    logging.info("Starting speedtest check")
+    (
+        r_server,
+        r_jitter,
+        r_ping,
+        r_download,
+        r_upload,
+        r_status,
+        r_testuuid,
+        r_servername,
+        r_serverlocation,
+        r_servercountry,
+        r_isp,
+    ) = run_test()
+    jitter.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    )
+    jitter.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    ).set(r_jitter)
+    ping.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    )
+    ping.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    ).set(r_ping)
+    download_speed.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    )
+    download_speed.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    ).set(r_download)
+    upload_speed.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    )
+    upload_speed.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    ).set(r_upload)
+    up.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    )
+    up.labels(
+        r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
+    ).set(r_status)
 
-    if datetime.datetime.now() > cache_until:
-        (
-            r_server,
-            r_jitter,
-            r_ping,
-            r_download,
-            r_upload,
-            r_status,
+    if r_status:  # Only log if test was successful
+        logging.info(
+            "UUID=%s ServerID=%s ServerName=%s ServerLocation=%s ServerCountry=%s ISP=%s Jitter=%sms Ping=%sms Download=%s Upload=%s",
             r_testuuid,
+            r_server,
             r_servername,
             r_serverlocation,
             r_servercountry,
             r_isp,
-        ) = run_test()
-        jitter.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        jitter.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_jitter)
-        ping.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        ping.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_ping)
-        download_speed.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        download_speed.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_download)
-        upload_speed.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        upload_speed.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_upload)
-        up.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        up.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_status)
-
-        if r_status:  # Only log if test was successful
-            logging.info(
-                "UUID=%s ServerID=%s ServerName=%s ServerLocation=%s ServerCountry=%s ISP=%s Jitter=%sms Ping=%sms Download=%s Upload=%s",
-                r_testuuid,
-                r_server,
-                r_servername,
-                r_serverlocation,
-                r_servercountry,
-                r_isp,
-                r_jitter,
-                r_ping,
-                bits_to_megabits(r_download),
-                bits_to_megabits(r_upload),
-            )
-
-        cache_until = datetime.datetime.now() + datetime.timedelta(
-            seconds=cache_seconds
+            r_jitter,
+            r_ping,
+            bits_to_megabits(r_download),
+            bits_to_megabits(r_upload),
         )
 
     return make_wsgi_app()
