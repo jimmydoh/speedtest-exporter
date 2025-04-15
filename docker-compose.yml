@@ -6,6 +6,5 @@ services:
       dockerfile: ./Dockerfile
     environment:
       - SPEEDTEST_PORT=9798
-      - SPEEDTEST_CACHE_FOR=3600
     ports:
       - $SPEEDTEST_PORT:$SPEEDTEST_PORT 

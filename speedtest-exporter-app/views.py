@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import subprocess
-from prometheus_client import make_wsgi_app, Gauge
+from prometheus_client import make_wsgi_app, Gauge, Info
 from flask import Flask
 from . import app
 
@@ -17,75 +17,31 @@ logging.basicConfig(
     format=FORMAT_STRING,
 )
 
-# Disable Waitress Logs
-log = logging.getLogger("waitress")
-log.disabled = True
-
 # Create Metrics
 jitter = Gauge(
     "speedtest_jitter_latency_milliseconds",
     "Speedtest current Jitter in ms",
-    [
-        "test_uuid",
-        "server_id",
-        "server_name",
-        "server_location",
-        "server_country",
-        "isp",
-    ],
 )
 ping = Gauge(
     "speedtest_ping_latency_milliseconds",
     "Speedtest current Ping in ms",
-    [
-        "test_uuid",
-        "server_id",
-        "server_name",
-        "server_location",
-        "server_country",
-        "isp",
-    ],
 )
 download_speed = Gauge(
     "speedtest_download_bits_per_second",
     "Speedtest current Download Speed in bit/s",
-    [
-        "test_uuid",
-        "server_id",
-        "server_name",
-        "server_location",
-        "server_country",
-        "isp",
-    ],
 )
 upload_speed = Gauge(
     "speedtest_upload_bits_per_second",
     "Speedtest current Upload speed in bits/s",
-    [
-        "test_uuid",
-        "server_id",
-        "server_name",
-        "server_location",
-        "server_country",
-        "isp",
-    ],
 )
 up = Gauge(
     "speedtest_up",
     "Speedtest status whether the scrape worked",
-    [
-        "test_uuid",
-        "server_id",
-        "server_name",
-        "server_location",
-        "server_country",
-        "isp",
-    ],
 )
-
-cache_seconds = int(os.environ.get("SPEEDTEST_CACHE_FOR", 0))
-cache_until = datetime.datetime.fromtimestamp(0)
-
+test_info = Info(
+    "speedtest",
+    "Speedtest Info",
+)
 
 def bytes_to_bits(bytes_per_sec):
     """Converts bytes to bits"""
@@ -111,6 +67,9 @@ def is_json(myjson):
 
 def run_test():
     """Run the speedtest and return the extracted results"""
+
+    logging.info("Running a new speedtest")
+
     manual_server_id = os.environ.get("SPEEDTEST_SERVER")
     timeout = int(os.environ.get("SPEEDTEST_TIMEOUT", 90))
 
@@ -128,39 +87,39 @@ def run_test():
         output = subprocess.check_output(cmd, timeout=timeout)
     except subprocess.CalledProcessError as e:
         logging.error("Speedtest CLI Error: %s", e)
-        return (0, 0, 0, 0, 0, 0, "", "", "", "", "")
+        return (0, 0, 0, 0, 0, "", "", "", "", "", "")
     except subprocess.TimeoutExpired:
         logging.error("Speedtest CLI process timeout")
-        return (0, 0, 0, 0, 0, 0, "", "", "", "", "")
+        return (0, 0, 0, 0, 0, "", "", "", "", "", "")
 
     if not is_json(output):
-        return (0, 0, 0, 0, 0, 0, "", "", "", "", "")
+        return (0, 0, 0, 0, 0, "", "", "", "", "", "")
 
     try:
         data = json.loads(output)
         if "error" in data:
             logging.error("Speedtest error: %s", data["error"])
-            return (0, 0, 0, 0, 0, 0, "", "", "", "", "")
+            return (0, 0, 0, 0, 0, "", "", "", "", "", "")
 
         if data.get("type") == "result":
-            # Label - server_id
             # Metric - jitter
             # Metric - latency
             # Metric - download
             # Metric - upload
             # Metric - up
-            # Label - test_uuid
-            # Label - server_name
-            # Label - server_location
-            # Label - server_country
-            # Label - isp
-            return (
-                int(data["server"]["id"]),
+            # Metric - id
+            # Metric - uuid
+            # Metric - name
+            # Metric - location
+            # Metric - country
+            # Metric - isp
+            return (                
                 data["ping"]["jitter"],
                 data["ping"]["latency"],
                 bytes_to_bits(data["download"]["bandwidth"]),
                 bytes_to_bits(data["upload"]["bandwidth"]),
                 1,
+                str(data["server"]["id"]),
                 data["result"]["id"],
                 data["server"]["name"],
                 data["server"]["location"],
@@ -169,78 +128,55 @@ def run_test():
             )
     except (KeyError, TypeError) as e:
         logging.error("Error parsing speedtest result: %s", e)
-        return (0, 0, 0, 0, 0, 0, "", "", "", "", "")
+        return (0, 0, 0, 0, 0, "", "", "", "", "", "")
 
-    return (0, 0, 0, 0, 0, 0, "", "", "", "", "")
+    return (0, 0, 0, 0, 0, "", "", "", "", "", "")
 
 
 @app.route("/metrics")
 def update_results():
-    """Update the results if expected by caching time"""
-    global cache_until
+    """Trigger the speedtest and return the metrics"""
+    logging.info("Starting speedtest check")
+    (
+        r_jitter,
+        r_ping,
+        r_download,
+        r_upload,
+        r_status,
+        r_server,
+        r_testuuid,
+        r_servername,
+        r_serverlocation,
+        r_servercountry,
+        r_isp,
+    ) = run_test()
+    jitter.set(r_jitter)
+    ping.set(r_ping)
+    download_speed.set(r_download)
+    upload_speed.set(r_upload)
+    up.set(r_status)
+    test_info.info({
+        'id': r_server, 
+        'uuid': r_testuuid,
+        'name': r_servername,
+        'location': r_serverlocation,
+        'country': r_servercountry,
+        'isp': r_isp
+        })
 
-    if datetime.datetime.now() > cache_until:
-        (
-            r_server,
-            r_jitter,
-            r_ping,
-            r_download,
-            r_upload,
-            r_status,
+    if r_status:  # Only log if test was successful
+        logging.info(
+            "UUID=%s ServerID=%s ServerName=%s ServerLocation=%s ServerCountry=%s ISP=%s Jitter=%sms Ping=%sms Download=%s Upload=%s",
             r_testuuid,
+            r_server,
             r_servername,
             r_serverlocation,
             r_servercountry,
             r_isp,
-        ) = run_test()
-        jitter.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        jitter.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_jitter)
-        ping.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        ping.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_ping)
-        download_speed.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        download_speed.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_download)
-        upload_speed.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        upload_speed.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_upload)
-        up.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        )
-        up.labels(
-            r_testuuid, r_server, r_servername, r_serverlocation, r_servercountry, r_isp
-        ).set(r_status)
-
-        if r_status:  # Only log if test was successful
-            logging.info(
-                "UUID=%s ServerID=%s ServerName=%s ServerLocation=%s ServerCountry=%s ISP=%s Jitter=%sms Ping=%sms Download=%s Upload=%s",
-                r_testuuid,
-                r_server,
-                r_servername,
-                r_serverlocation,
-                r_servercountry,
-                r_isp,
-                r_jitter,
-                r_ping,
-                bits_to_megabits(r_download),
-                bits_to_megabits(r_upload),
-            )
-
-        cache_until = datetime.datetime.now() + datetime.timedelta(
-            seconds=cache_seconds
+            r_jitter,
+            r_ping,
+            bits_to_megabits(r_download),
+            bits_to_megabits(r_upload),
         )
 
     return make_wsgi_app()
