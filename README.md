@@ -3,8 +3,13 @@
 Simple **Speedtest exporter** for **Prometheus** written in **Python** using the
 official CLI from **Ookla**
 
-You can get all the documentation [here](https://docs.miguelndecarvalho.pt/projects/speedtest-exporter/)
+Forked from [MiguelNdeCarvalho/speedtest-exporter](https://github.com/MiguelNdeCarvalho/speedtest-exporter)
 
-## Thanks to
+The following changes have been completed:
+* Add some of the adjustments / fixes implemented by [TheDaneH3](https://github.com/TheDaneH3/speedtest-exporter)
+* Add additional data on client ISP, server details and test UUID from the speedtest results as labels in the Prometheus exports (similar functionality to the Go version from [aaronmwellborn](https://github.com/aaronmwelborn/speedtest_exporter) / [danopstech](https://github.com/danopstech/speedtest_exporter))
+* Move from waitress to Gunicorn
+* Only Docker deployment supported, remove checks for speedtest binary
 
-- [Nils Müller](https://github.com/tyriis)
+The following changes are planned:
+* Modify the sample Grafana dashboard in line with the new labels, based on the sample dashboards from both [MiguelNdeCarvalho](https://github.com/MiguelNdeCarvalho/speedtest-exporter/blob/main/Dashboard/Speedtest-Exporter.json) and [danopstech](https://github.com/danopstech/speedtest_exporter)
