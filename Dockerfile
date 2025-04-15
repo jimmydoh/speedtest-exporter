@@ -2,6 +2,8 @@ FROM python:3.13-alpine
 
 # Service Port
 ENV SPEEDTEST_PORT=9798
+ENV SPEEDTEST_TIMEOUT=90
+ENV NUM_WORKERS=2
 
 # Expose port
 EXPOSE ${SPEEDTEST_PORT}
@@ -53,4 +55,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget -q -O - http://localhost:$SPEEDTEST_PORT/ || exit 1
 
 # Start gunicorn
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$SPEEDTEST_PORT speedtest-exporter-app.webapp:app"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$SPEEDTEST_PORT --timeout $SPEEDTEST_TIMEOUT --workers $NUM_WORKERS speedtest-exporter-app.webapp:app"]
