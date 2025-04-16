@@ -87,19 +87,19 @@ def run_test():
         output = subprocess.check_output(cmd, timeout=timeout)
     except subprocess.CalledProcessError as e:
         logging.error("Speedtest CLI Error: %s", e)
-        return (0, 0, 0, 0, 0, "", "", "", "", "", "")
+        return (0, 0, 0, 0, 0, "", "", "", "", "", "", "")
     except subprocess.TimeoutExpired:
         logging.error("Speedtest CLI process timeout")
-        return (0, 0, 0, 0, 0, "", "", "", "", "", "")
+        return (0, 0, 0, 0, 0, "", "", "", "", "", "", "")
 
     if not is_json(output):
-        return (0, 0, 0, 0, 0, "", "", "", "", "", "")
+        return (0, 0, 0, 0, 0, "", "", "", "", "", "", "")
 
     try:
         data = json.loads(output)
         if "error" in data:
             logging.error("Speedtest error: %s", data["error"])
-            return (0, 0, 0, 0, 0, "", "", "", "", "", "")
+            return (0, 0, 0, 0, 0, "", "", "", "", "", "", "")
 
         if data.get("type") == "result":
             # Metric - jitter
@@ -125,12 +125,13 @@ def run_test():
                 data["server"]["location"],
                 data["server"]["country"],
                 data["isp"],
+                data["timestamp"],
             )
     except (KeyError, TypeError) as e:
         logging.error("Error parsing speedtest result: %s", e)
-        return (0, 0, 0, 0, 0, "", "", "", "", "", "")
+        return (0, 0, 0, 0, 0, "", "", "", "", "", "", "")
 
-    return (0, 0, 0, 0, 0, "", "", "", "", "", "")
+    return (0, 0, 0, 0, 0, "", "", "", "", "", "", "")
 
 
 @app.route("/metrics")
@@ -149,6 +150,7 @@ def update_results():
         r_serverlocation,
         r_servercountry,
         r_isp,
+        r_timestamp,
     ) = run_test()
     jitter.set(r_jitter)
     ping.set(r_ping)
@@ -161,7 +163,8 @@ def update_results():
         'name': r_servername,
         'location': r_serverlocation,
         'country': r_servercountry,
-        'isp': r_isp
+        'isp': r_isp,
+        'timestamp': r_timestamp,
         })
 
     if r_status:  # Only log if test was successful
